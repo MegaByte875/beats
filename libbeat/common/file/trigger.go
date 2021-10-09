@@ -28,6 +28,7 @@ const (
 	rotateReasonNoRotate rotateReason = iota
 	rotateReasonInitializing
 	rotateReasonFileSize
+	rotateReasonFileLine
 	rotateReasonManualTrigger
 	rotateReasonTimeInterval
 )
@@ -38,6 +39,8 @@ func (rr rotateReason) String() string {
 		return "initializing"
 	case rotateReasonFileSize:
 		return "file size"
+	case rotateReasonFileLine:
+		return "file line"
 	case rotateReasonManualTrigger:
 		return "manual trigger"
 	case rotateReasonTimeInterval:
@@ -52,7 +55,7 @@ type trigger interface {
 	TriggerRotation(dataLen uint) rotateReason
 }
 
-func newTriggers(rotateOnStartup bool, interval time.Duration, maxSizeBytes uint) []trigger {
+func newTriggers(rotateOnStartup bool, interval time.Duration, maxSizeBytes, maxLines uint) []trigger {
 	triggers := make([]trigger, 0)
 
 	if rotateOnStartup {
@@ -63,6 +66,9 @@ func newTriggers(rotateOnStartup bool, interval time.Duration, maxSizeBytes uint
 	}
 	if maxSizeBytes > 0 {
 		triggers = append(triggers, &sizeTrigger{maxSizeBytes: maxSizeBytes, size: 0})
+	}
+	if maxLines > 0 {
+		triggers = append(triggers, &lineTrigger{maxLines: maxLines, line: 0})
 	}
 	return triggers
 }
@@ -92,6 +98,20 @@ func (t *sizeTrigger) TriggerRotation(dataLen uint) rotateReason {
 		return rotateReasonFileSize
 	}
 	t.size += dataLen
+	return rotateReasonNoRotate
+}
+
+type lineTrigger struct {
+	maxLines uint
+	line     uint
+}
+
+func (t *lineTrigger) TriggerRotation(dataLines uint) rotateReason {
+	if t.line+dataLines > t.maxLines {
+		t.line = 1
+		return rotateReasonFileLine
+	}
+	t.line += dataLines
 	return rotateReasonNoRotate
 }
 

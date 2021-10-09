@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -45,6 +46,8 @@ var suffixes = map[string]SuffixType{
 	"date":  SuffixDate,
 }
 
+var lineRegex = regexp.MustCompile(`(\S+)(\n|\r\n)`)
+
 // rotater is the interface responsible for rotating and finding files.
 type rotater interface {
 	// ActiveFile returns the path to the file that is actively written.
@@ -65,6 +68,7 @@ type Rotator struct {
 
 	filename        string
 	maxSizeBytes    uint
+	maxLines        uint
 	maxBackups      uint
 	interval        time.Duration
 	permissions     os.FileMode
@@ -98,6 +102,14 @@ func Suffix(s SuffixType) RotatorOption {
 func MaxSizeBytes(n uint) RotatorOption {
 	return func(r *Rotator) {
 		r.maxSizeBytes = n
+	}
+}
+
+// MaxSizeBytes configures the maximum lines that a file should
+// contain before being rotated. The default is 1000.
+func MaxLines(n uint) RotatorOption {
+	return func(r *Rotator) {
+		r.maxLines = n
 	}
 }
 
@@ -154,6 +166,7 @@ func RedirectStderr(redirect bool) RotatorOption {
 func NewFileRotator(filename string, options ...RotatorOption) (*Rotator, error) {
 	r := &Rotator{
 		maxSizeBytes:    10 * 1024 * 1024, // 10 MiB
+		maxLines:        1000,
 		maxBackups:      7,
 		permissions:     0600,
 		interval:        0,
@@ -165,9 +178,12 @@ func NewFileRotator(filename string, options ...RotatorOption) (*Rotator, error)
 		opt(r)
 	}
 
-	if r.maxSizeBytes == 0 {
-		return nil, errors.New("file rotator max file size must be greater than 0")
-	}
+	//if r.maxSizeBytes == 0 {
+	//	return nil, errors.New("file rotator max file size must be greater than 0")
+	//}
+	//if r.maxLines == 0 {
+	//	return nil, errors.New("file rotator max lines must be greater than 0")
+	//}
 	if r.maxBackups > MaxBackupsLimit {
 		return nil, errors.Errorf("file rotator max backups %d is greater than the limit of %v", r.maxBackups, MaxBackupsLimit)
 	}
@@ -186,12 +202,13 @@ func NewFileRotator(filename string, options ...RotatorOption) (*Rotator, error)
 		shouldRotateOnStart = false
 	}
 
-	r.triggers = newTriggers(shouldRotateOnStart, r.interval, r.maxSizeBytes)
+	r.triggers = newTriggers(shouldRotateOnStart, r.interval, r.maxSizeBytes, r.maxLines)
 
 	if r.log != nil {
 		r.log.Debugw("Initialized file rotator",
 			"filename", r.filename,
 			"max_size_bytes", r.maxSizeBytes,
+			"max_lines", r.maxLines,
 			"max_backups", r.maxBackups,
 			"permissions", r.permissions,
 			"suffix", r.suffix,
@@ -208,18 +225,14 @@ func (r *Rotator) Write(data []byte) (int, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	dataLen := uint(len(data))
-	if dataLen > r.maxSizeBytes {
-		return 0, errors.Errorf("data size (%d bytes) is greater than "+
-			"the max file size (%d bytes)", dataLen, r.maxSizeBytes)
-	}
+	lines := lineRegex.FindAll(data, -1)
 
 	if r.file == nil {
 		if err := r.openNew(); err != nil {
 			return 0, errors.Wrap(err, "failed to open new log file for writing")
 		}
 	} else {
-		if reason, t := r.isRotationTriggered(dataLen); reason != rotateReasonNoRotate {
+		if reason, t := r.isRotationTriggered(uint(len(lines))); reason != rotateReasonNoRotate {
 			if err := r.rotateWithTime(reason, t); err != nil {
 				return 0, errors.Wrapf(err, "error file rotating files reason: %s", reason)
 			}
@@ -335,9 +348,9 @@ func (r *Rotator) purge() error {
 	return nil
 }
 
-func (r *Rotator) isRotationTriggered(dataLen uint) (rotateReason, time.Time) {
+func (r *Rotator) isRotationTriggered(dataLines uint) (rotateReason, time.Time) {
 	for _, t := range r.triggers {
-		reason := t.TriggerRotation(dataLen)
+		reason := t.TriggerRotation(dataLines)
 		if reason != rotateReasonNoRotate {
 			return reason, time.Now()
 		}

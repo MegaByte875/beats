@@ -86,6 +86,7 @@ func (out *fileOutput) init(beat beat.Info, c config) error {
 		path,
 		file.Suffix(c.Suffix),
 		file.MaxSizeBytes(c.RotateEveryKb*1024),
+		file.MaxLines(c.RotateEveryLine),
 		file.MaxBackups(c.NumberOfFiles),
 		file.Permissions(os.FileMode(c.Permissions)),
 		file.RotateOnStartup(c.RotateOnStartup),
@@ -101,8 +102,8 @@ func (out *fileOutput) init(beat beat.Info, c config) error {
 	}
 
 	out.log.Infof("Initialized file output. "+
-		"path=%v max_size_bytes=%v max_backups=%v permissions=%v",
-		path, c.RotateEveryKb*1024, c.NumberOfFiles, os.FileMode(c.Permissions))
+		"path=%v max_size_bytes=%v max_lines=%v max_backups=%v permissions=%v",
+		path, c.RotateEveryKb*1024, c.RotateEveryLine, c.NumberOfFiles, os.FileMode(c.Permissions))
 
 	return nil
 }

@@ -1,6 +1,7 @@
 BUILD_DIR=$(CURDIR)/build
 COVERAGE_DIR=$(BUILD_DIR)/coverage
-BEATS?=auditbeat filebeat heartbeat journalbeat metricbeat packetbeat winlogbeat x-pack/functionbeat x-pack/elastic-agent x-pack/osquerybeat
+#BEATS?=auditbeat filebeat heartbeat journalbeat metricbeat packetbeat winlogbeat x-pack/functionbeat x-pack/elastic-agent x-pack/osquerybeat
+BEATS?=filebeat
 PROJECTS=libbeat $(BEATS)
 PROJECTS_ENV=libbeat filebeat metricbeat
 PYTHON_ENV?=$(BUILD_DIR)/python-env
@@ -15,7 +16,8 @@ XPACK_SUFFIX=x-pack/
 # PROJECTS_XPACK_PKG is a list of Beats that have independent packaging support
 # in the x-pack directory (rather than having the OSS build produce both sets
 # of artifacts). This will be removed once we complete the transition.
-PROJECTS_XPACK_PKG=x-pack/auditbeat x-pack/dockerlogbeat x-pack/filebeat x-pack/heartbeat x-pack/metricbeat x-pack/winlogbeat x-pack/packetbeat
+#PROJECTS_XPACK_PKG=x-pack/auditbeat x-pack/dockerlogbeat x-pack/filebeat x-pack/heartbeat x-pack/metricbeat x-pack/winlogbeat x-pack/packetbeat
+PROJECTS_XPACK_PKG=x-pack/heartbeat
 # PROJECTS_XPACK_MAGE is a list of Beats whose primary build logic is based in
 # Mage. For compatibility with CI testing these projects support a subset of the
 # makefile targets. After all Beats converge to primarily using Mage we can
@@ -112,12 +114,12 @@ check-default:
 	@$(MAKE) check-go
 	@$(MAKE) check-no-changes
 
-## ccheck-go : Check there is no changes in Go modules.
+## check-go : Check there is no changes in Go modules.
 .PHONY: check-go
 check-go:
 	@go mod tidy
 
-## ccheck-no-changes : Check there is no local changes.
+## check-no-changes : Check there is no local changes.
 .PHONY: check-no-changes
 check-no-changes:
 	@go mod tidy
@@ -207,7 +209,7 @@ snapshot:
 
 ## release : Builds a release.
 .PHONY: release
-release: beats-dashboards
+release: update
 	@mage dumpVariables
 	@$(foreach var,$(BEATS) $(PROJECTS_XPACK_PKG),$(MAKE) -C $(var) release || exit 1;)
 	@$(foreach var,$(BEATS) $(PROJECTS_XPACK_PKG), \

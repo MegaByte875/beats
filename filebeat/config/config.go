@@ -44,10 +44,16 @@ type Config struct {
 	ConfigDir          string               `config:"config_dir"`
 	ShutdownTimeout    time.Duration        `config:"shutdown_timeout"`
 	Modules            []*common.Config     `config:"modules"`
+	Storage            Storage              `config:"storage"`
 	ConfigInput        *common.Config       `config:"config.inputs"`
 	ConfigModules      *common.Config       `config:"config.modules"`
 	Autodiscover       *autodiscover.Config `config:"autodiscover"`
 	OverwritePipelines bool                 `config:"overwrite_pipelines"`
+}
+
+type Storage struct {
+	Provider  string `config:"provider"`
+	UploadDir string `config:"upload_dir"`
 }
 
 type Registry struct {

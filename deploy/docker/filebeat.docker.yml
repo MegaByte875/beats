@@ -3,15 +3,19 @@ filebeat.config:
     path: ${path.config}/modules.d/*.yml
     reload.enabled: false
 
-filebeat.autodiscover:
-  providers:
-    - type: docker
-      hints.enabled: true
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /tmp/nebula-importer-*.log
 
-processors:
-- add_cloud_metadata: ~
+filebeat.storage.provider: azureBlob
+filebeat.storage.upload_dir: /tmp/uploader
 
-output.elasticsearch:
-  hosts: '${ELASTICSEARCH_HOSTS:elasticsearch:9200}'
-  username: '${ELASTICSEARCH_USERNAME:}'
-  password: '${ELASTICSEARCH_PASSWORD:}'
+output.file:
+  path: /tmp/uploader
+  filename: importer.log
+  rotate_every_kb: 0
+  rotate_every_line: 10000
+  number_of_files: 1024
+  permissions: 0600

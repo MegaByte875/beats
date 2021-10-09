@@ -28,7 +28,8 @@ type config struct {
 	Path            string          `config:"path"`
 	Filename        string          `config:"filename"`
 	Suffix          file.SuffixType `config:"suffix"`
-	RotateEveryKb   uint            `config:"rotate_every_kb" validate:"min=1"`
+	RotateEveryKb   uint            `config:"rotate_every_kb" validate:"min=0"`
+	RotateEveryLine uint            `config:"rotate_every_line" validate:"min=0"`
 	NumberOfFiles   uint            `config:"number_of_files"`
 	Codec           codec.Config    `config:"codec"`
 	Permissions     uint32          `config:"permissions"`
@@ -40,6 +41,7 @@ func defaultConfig() config {
 		Suffix:          file.SuffixCount,
 		NumberOfFiles:   7,
 		RotateEveryKb:   10 * 1024,
+		RotateEveryLine: 1000,
 		Permissions:     0600,
 		RotateOnStartup: true,
 	}

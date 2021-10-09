@@ -20,6 +20,7 @@ package beater
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -48,7 +49,7 @@ import (
 	"github.com/elastic/beats/v7/libbeat/statestore"
 	"github.com/elastic/go-concert/unison"
 
-	_ "github.com/elastic/beats/v7/filebeat/include"
+	_ "github.com/elastic/beats/v7/filebeat/storage/blob"
 
 	// Add filebeat level processors
 	_ "github.com/elastic/beats/v7/filebeat/processor/add_kubernetes_metadata"
@@ -361,6 +362,17 @@ func (fb *Filebeat) Run(b *beat.Beat) error {
 		return fmt.Errorf("Failed to start crawler: %+v", err)
 	}
 
+	if err := os.MkdirAll(config.Storage.UploadDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %+v", err)
+	}
+
+	uploader := newUploader(config.Storage.UploadDir)
+	err = uploader.Start(config.Storage.Provider)
+	if err != nil {
+		uploader.Stop()
+		return fmt.Errorf("failed to start uploader: %+v", err)
+	}
+
 	// If run once, add crawler completion check as alternative to done signal
 	if *once {
 		runOnce := func() {
@@ -409,6 +421,7 @@ func (fb *Filebeat) Run(b *beat.Beat) error {
 	modules.Stop()
 	adiscover.Stop()
 	crawler.Stop()
+	uploader.Stop()
 
 	timeout := fb.config.ShutdownTimeout
 	// Checks if on shutdown it should wait for all events to be published
