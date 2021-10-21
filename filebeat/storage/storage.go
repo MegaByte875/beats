@@ -53,5 +53,5 @@ type ContainerCreateResponse struct {
 type Storage interface {
 	CreateContainer(ctx context.Context, containerName string) (*ContainerCreateResponse, error)
 
-	UploadObject(ctx context.Context, containerName, objectName, data string) (*UploadResponse, error)
+	UploadObject(ctx context.Context, containerName, objectName string, data []byte) (*UploadResponse, error)
 }

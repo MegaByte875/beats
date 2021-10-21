@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +36,7 @@ type SuffixType uint32
 const (
 	// MaxBackupsLimit is the upper bound on the number of backup files. Any values
 	// greater will result in an error.
-	MaxBackupsLimit = 1024
+	MaxBackupsLimit = 128
 
 	SuffixCount SuffixType = iota + 1
 	SuffixDate
@@ -410,7 +411,8 @@ func (r *Rotator) closeFile() error {
 
 type countRotator struct {
 	log             Logger
-	filename        string
+	filenamePrefix  string
+	currentFilename string
 	intervalRotator *intervalRotator
 	maxBackups      uint
 }
@@ -429,19 +431,11 @@ func newRotater(log Logger, s SuffixType, filename string, maxBackups uint, inte
 		if interval > 0 {
 			return newIntervalRotator(log, interval, filename)
 		}
-		return &countRotator{
-			log:        log,
-			filename:   filename,
-			maxBackups: maxBackups,
-		}
+		return newCountRotator(log, filename, maxBackups)
 	case SuffixDate:
 		return newDateRotater(log, filename)
 	default:
-		return &countRotator{
-			log:        log,
-			filename:   filename,
-			maxBackups: maxBackups,
-		}
+		return newCountRotator(log, filename, maxBackups)
 	}
 }
 
@@ -513,57 +507,83 @@ func (d *dateRotator) OrderLog(filename string) time.Time {
 	return ts
 }
 
+func newCountRotator(log Logger, filename string, maxBackups uint) rotater {
+	d := &countRotator{
+		log:            log,
+		filenamePrefix: filename + ".",
+		maxBackups:     maxBackups,
+	}
+
+	d.currentFilename = d.filenamePrefix + "0"
+	files, err := filepath.Glob(d.filenamePrefix + "*")
+	if err != nil {
+		return d
+	}
+
+	// continue from last file
+	if len(files) != 0 {
+		if len(files) == 1 {
+			d.currentFilename = files[0]
+		} else {
+			d.SortModIndexLogs(files)
+			d.currentFilename = files[len(files)-1]
+		}
+	}
+
+	return d
+}
+
 func (c *countRotator) ActiveFile() string {
-	return c.filename
+	return c.currentFilename
 }
 
 func (c *countRotator) RotatedFiles() []string {
-	files := make([]string, 0)
-	for i := c.maxBackups + 1; i >= 1; i-- {
-		name := c.backupName(i)
-		if _, err := os.Stat(name); os.IsNotExist(err) {
-			continue
-		} else if err != nil {
-			c.log.Debugw("failed to stat rotated file")
-			return files
+	files, err := filepath.Glob(c.filenamePrefix + "*")
+	if err != nil {
+		if c.log != nil {
+			c.log.Debugw("failed to list existing logs: %+v", err)
 		}
-		files = append(files, name)
 	}
 
+	c.SortModIndexLogs(files)
 	return files
 }
 
-func (c *countRotator) backupName(n uint) string {
-	if n == 0 {
-		return c.ActiveFile()
+func (c *countRotator) Rotate(reason rotateReason, _ time.Time) error {
+	dir, name := filepath.Dir(c.ActiveFile()), filepath.Base(c.ActiveFile())
+	s := strings.Split(name, ".")
+	if len(s) != 3 {
+		return fmt.Errorf("file format invalid, current file %s", c.currentFilename)
 	}
-	return c.ActiveFile() + "." + strconv.Itoa(int(n))
+
+	index, err := strconv.Atoi(s[2])
+	if err != nil {
+		return err
+	}
+	s[2] = strconv.Itoa(index + 1)
+	c.currentFilename = filepath.Join(dir, strings.Join(s, "."))
+
+	// Log when rotation of the main file occurs.
+	if c.log != nil {
+		c.log.Debugw("Rotating file", "filename", c.currentFilename, "reason", reason)
+	}
+
+	return nil
 }
 
-func (c *countRotator) Rotate(reason rotateReason, _ time.Time) error {
-	for i := c.maxBackups + 1; i > 0; i-- {
-		old := c.backupName(i - 1)
-		older := c.backupName(i)
+func (c *countRotator) SortModIndexLogs(files []string) {
+	sort.Slice(
+		files,
+		func(i, j int) bool {
+			return indexCompare(files[i], files[j])
+		},
+	)
+}
 
-		if _, err := os.Stat(old); os.IsNotExist(err) {
-			continue
-		} else if err != nil {
-			return errors.Wrap(err, "failed to rotate backups")
-		}
-
-		if err := os.Remove(older); err != nil && !os.IsNotExist(err) {
-			return errors.Wrap(err, "failed to rotate backups")
-		}
-		if err := os.Rename(old, older); err != nil {
-			return errors.Wrap(err, "failed to rotate backups")
-		} else if i == 1 {
-			// Log when rotation of the main file occurs.
-			if c.log != nil {
-				c.log.Debugw("Rotating file", "filename", old, "reason", reason)
-			}
-		}
-	}
-	return nil
+func indexCompare(s1, s2 string) bool {
+	index1, _ := strconv.Atoi(strings.Split(s1, ".")[2])
+	index2, _ := strconv.Atoi(strings.Split(s2, ".")[2])
+	return index1 < index2
 }
 
 func (s *SuffixType) Unpack(v string) error {

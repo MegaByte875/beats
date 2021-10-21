@@ -1,10 +1,10 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
-	"strings"
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -39,8 +39,8 @@ type storageService struct {
 
 func NewBlobService() storage.Storage {
 	return &storageService{
-		accountName: "Name",
-		accountKey:  "Key",
+		accountName: "x",
+		accountKey:  "J",
 	}
 }
 
@@ -78,20 +78,24 @@ func (c *storageService) CreateContainer(ctx context.Context, containerName stri
 	return &storage.ContainerCreateResponse{AzureResponse: resp}, err
 }
 
-func (c *storageService) UploadObject(ctx context.Context, containerName, blobName, data string) (*storage.UploadResponse, error) {
-	blobURL, err := c.getBlobURL(containerName, blobName)
+func (c *storageService) UploadObject(ctx context.Context, containerName, blobName string, data []byte) (*storage.UploadResponse, error) {
+	blobURL, err := c.getBlockBlobURL(containerName, blobName)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := blobURL.ToBlockBlobURL().Upload(
+	resp, err := blobURL.Upload(
 		ctx,
-		strings.NewReader(data),
+		bytes.NewReader(data),
 		azblob.BlobHTTPHeaders{
 			ContentType: "text/plain",
 		},
 		azblob.Metadata{},
-		azblob.BlobAccessConditions{})
+		azblob.BlobAccessConditions{},
+		azblob.DefaultAccessTier,
+		nil,
+		azblob.ClientProvidedKeyOptions{},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -107,10 +111,10 @@ func (c *storageService) getContainerURL(containerName string) (azblob.Container
 	return c.serviceURL.NewContainerURL(containerName), nil
 }
 
-func (c *storageService) getBlobURL(containerName, blobName string) (azblob.BlobURL, error) {
+func (c *storageService) getBlockBlobURL(containerName, blobName string) (azblob.BlockBlobURL, error) {
 	containerURL, err := c.getContainerURL(containerName)
 	if err != nil {
-		return azblob.BlobURL{}, err
+		return azblob.BlockBlobURL{}, err
 	}
-	return containerURL.NewBlobURL(blobName), nil
+	return containerURL.NewBlockBlobURL(blobName), nil
 }

@@ -7,10 +7,11 @@ filebeat.inputs:
   - type: log
     enabled: true
     paths:
-      - /tmp/nebula-importer-*.log
+      - /tmp/importer/nebula-importer-*.log
 
 filebeat.storage.provider: azureBlob
 filebeat.storage.upload_dir: /tmp/uploader
+filebeat.storage.container: ng6ab720c4e2c3
 
 output.file:
   path: /tmp/uploader

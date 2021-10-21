@@ -3,8 +3,10 @@ package beater
 import (
 	"context"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/elastic/beats/v7/filebeat/storage"
 	"github.com/elastic/beats/v7/libbeat/logp"
@@ -71,7 +73,7 @@ func fileTrigger(dir string, evtCh chan string, errCh chan error, stop <-chan st
 	return nil
 }
 
-func (u *uploader) Start(provider string) error {
+func (u *uploader) Start(provider, container string) error {
 	u.log.Infof("Start file uploader")
 
 	evtCh := make(chan string, 1)
@@ -98,21 +100,28 @@ func (u *uploader) Start(provider string) error {
 			return
 		}
 
-		resp, err := storager.UploadObject(context.TODO(), "logs", fileName, string(data))
+		resp, err := storager.UploadObject(context.TODO(), container, fileName, data)
 		if !successCode(resp.AzureResponse.StatusCode()) {
 			u.log.Errorf("status code is %d", resp.AzureResponse.StatusCode())
+			return
 		}
 		if err != nil {
 			u.log.Errorf("upload file failed: %v", err)
+			return
 		}
 		u.log.Infof("upload file %s succeed", fileName)
 	}
 
-	p, err := ants.NewPoolWithFunc(100, uploadFunc)
+	p, err := ants.NewPoolWithFunc(1, uploadFunc)
 	if err != nil {
 		return err
 	}
 	defer p.Release()
+
+	tick := time.NewTicker(time.Second * 1)
+	defer tick.Stop()
+
+	var updated time.Time
 
 	for {
 		select {
@@ -120,6 +129,14 @@ func (u *uploader) Start(provider string) error {
 			err := p.Invoke(filePath)
 			if err != nil {
 				return err
+			}
+			updated = time.Now()
+		case <-tick.C:
+			s := time.Now().Sub(updated).Seconds()
+			if updated.Second() > 0 && s > 5 {
+				u.log.Infof("no rotate log file created for %v seconds", s)
+				u.log.Info("--- EXIT FILEBEAT ---")
+				os.Exit(0)
 			}
 		case err := <-errCh:
 			return err

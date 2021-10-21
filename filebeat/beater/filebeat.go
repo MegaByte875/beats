@@ -367,7 +367,7 @@ func (fb *Filebeat) Run(b *beat.Beat) error {
 	}
 
 	uploader := newUploader(config.Storage.UploadDir)
-	err = uploader.Start(config.Storage.Provider)
+	err = uploader.Start(config.Storage.Provider, config.Storage.Container)
 	if err != nil {
 		uploader.Stop()
 		return fmt.Errorf("failed to start uploader: %+v", err)

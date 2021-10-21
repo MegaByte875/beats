@@ -54,6 +54,7 @@ type Config struct {
 type Storage struct {
 	Provider  string `config:"provider"`
 	UploadDir string `config:"upload_dir"`
+	Container string `config:"container"`
 }
 
 type Registry struct {
