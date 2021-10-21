@@ -17,6 +17,6 @@ output.file:
   path: /tmp/uploader
   filename: importer.log
   rotate_every_kb: 0
-  rotate_every_line: 10000
-  number_of_files: 1024
+  rotate_every_line: 5000
+  number_of_files: 128
   permissions: 0600
