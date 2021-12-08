@@ -11,12 +11,16 @@ filebeat.inputs:
 
 filebeat.storage.provider: azureBlob
 filebeat.storage.upload_dir: /tmp/uploader
-filebeat.storage.container: ng6ab720c4e2c3
+filebeat.storage.container: ng5f0013
 
 output.file:
   path: /tmp/uploader
   filename: importer.log
   rotate_every_kb: 0
-  rotate_every_line: 5000
-  number_of_files: 128
+  rotate_every_line: 20
+  number_of_files: 10
   permissions: 0600
+
+processors:
+  - drop_fields:
+      fields: ["host", "ecs", "agent", "input", "log"]

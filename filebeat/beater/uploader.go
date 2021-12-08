@@ -88,16 +88,25 @@ func (u *uploader) Start(provider, container string) error {
 		return err
 	}
 
-	uploadFunc := func(filePath interface{}) {
-		path, ok := filePath.(string)
+	type uploadParam struct {
+		filePath string
+		isLast   bool
+	}
+
+	uploadFunc := func(args interface{}) {
+		param, ok := args.(uploadParam)
 		if !ok {
 			return
 		}
-		fileName := filepath.Base(path)
+		fileName := filepath.Base(param.filePath)
 
-		data, err := ioutil.ReadFile(path)
+		data, err := ioutil.ReadFile(param.filePath)
 		if err != nil {
 			return
+		}
+
+		if param.isLast {
+			data = append(data, []byte("--- END OF NEBULA IMPORTER ---\n")...)
 		}
 
 		resp, err := storager.UploadObject(context.TODO(), container, fileName, data)
@@ -118,22 +127,27 @@ func (u *uploader) Start(provider, container string) error {
 	}
 	defer p.Release()
 
-	tick := time.NewTicker(time.Second * 1)
+	tick := time.NewTicker(time.Second * 2)
 	defer tick.Stop()
 
 	var updated time.Time
+	var lastFile string
 
 	for {
 		select {
 		case filePath := <-evtCh:
-			err := p.Invoke(filePath)
+			err := p.Invoke(uploadParam{filePath: filePath, isLast: false})
 			if err != nil {
 				return err
 			}
 			updated = time.Now()
+			lastFile = filePath
 		case <-tick.C:
+			u.log.Info("----- tick !!! -----")
 			s := time.Now().Sub(updated).Seconds()
-			if updated.Second() > 0 && s > 5 {
+			if !updated.IsZero() && s > 5 {
+				u.log.Info("recheck the last log file again")
+				uploadFunc(uploadParam{filePath: lastFile, isLast: true})
 				u.log.Infof("no rotate log file created for %v seconds", s)
 				u.log.Info("--- EXIT FILEBEAT ---")
 				os.Exit(0)

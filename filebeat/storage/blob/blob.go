@@ -88,7 +88,7 @@ func (c *storageService) UploadObject(ctx context.Context, containerName, blobNa
 		ctx,
 		bytes.NewReader(data),
 		azblob.BlobHTTPHeaders{
-			ContentType: "text/plain",
+			ContentType: "multipart/form-data",
 		},
 		azblob.Metadata{},
 		azblob.BlobAccessConditions{},
